@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#087fdb"><meta name="description" content="Your cheerful harbor master for localhost development servers.">
+  <title>Port Authority — Localhost harbor master</title><link rel="stylesheet" href="/styles.css?v=3">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Port Authority home"><span class="brand-mark">⚓</span><span>PORT AUTHORITY</span><small>LOCAL HARBOR</small></a>
+      <div class="top-actions"><div class="live-pill"><span></span> Harbor patrol active</div><div class="range-tag">WATERS 3000–3999</div><button class="icon-button" id="refreshButton" type="button" aria-label="Sweep harbor again" title="Sweep harbor again"><span class="refresh-icon">↻</span></button></div>
+    </header>
+    <main>
+      <section class="hero">
+        <div class="hero-copy"><p class="eyebrow">⚑ HARBOR MASTER'S LOG / LOCALHOST</p><h1>Full steam<br><em>ahead.</em></h1><p class="lede">Track every dev server sailing through the 3000s. Meet the crew, inspect the manifest, or send a vessel on its merry way.</p></div>
+        <div class="harbor-scene" aria-hidden="true">
+          <div class="sun"></div><div class="cloud cloud-one"></div><div class="cloud cloud-two"></div><div class="gulls">⌁⌁</div>
+          <div class="lighthouse"><i></i><b></b><span></span></div>
+          <div class="sailboat"><i></i><b></b><span></span></div>
+          <div class="ship"><div class="containers"><i></i><i></i><i></i><i></i><i></i></div><div class="cabin"></div><div class="hull"><span>LOCALHOST</span></div></div>
+          <div class="tugboat"><i></i><b></b><span>PA</span></div>
+          <div class="wave wave-one"></div><div class="wave wave-two"></div><div class="buoy"><span id="stampCount">00</span><small>VESSELS</small></div>
+        </div>
+      </section>
+      <section class="stats" aria-label="Port summary">
+        <article><span>OCCUPIED BERTHS</span><strong id="usedCount">—</strong><small>of 1,000 inspected</small></article>
+        <article><span>CODEX FLEET</span><strong id="codexCount">—</strong><small>vessels identified</small></article>
+        <article><span>CLAUDE FLEET</span><strong id="claudeCount">—</strong><small>vessels identified</small></article>
+        <article class="last-scan"><span>LAST HARBOR SWEEP</span><strong id="lastScan">—</strong><small>patrols every 3 sec</small></article>
+      </section>
+      <section class="board">
+        <div class="board-head"><div><p class="section-number">01 — ARRIVALS &amp; DEPARTURES</p><h2>Vessels in harbor</h2></div><label class="search"><span>⌕</span><input id="searchInput" type="search" placeholder="Search berth, vessel, crew…" autocomplete="off"></label></div>
+        <div class="column-labels" aria-hidden="true"><span>BERTH / CREW</span><span>VESSEL &amp; SIGNAL</span><span>MANIFEST ORIGIN</span><span>HARBOR ACTION</span></div>
+        <div id="portList" class="port-list" aria-live="polite" aria-busy="true"><div class="loading-row"><span></span><div><b></b><i></i></div><em></em></div><div class="loading-row"><span></span><div><b></b><i></i></div><em></em></div><div class="loading-row"><span></span><div><b></b><i></i></div><em></em></div></div>
+      </section>
+      <footer><span>⚓ PORT AUTHORITY / LOCAL WATERS ONLY</span><p><i></i> Harbor office: 127.0.0.1 · Graceful departure with tugboat fallback</p><span>EST. 2026</span></footer>
+    </main>
+  </div>
+  <div id="toastRegion" class="toast-region" aria-live="polite"></div><script src="/app.js?v=3" defer></script>
+</body>
+</html>
