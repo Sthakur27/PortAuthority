@@ -25,5 +25,11 @@ Then visit [http://127.0.0.1:4377](http://127.0.0.1:4377).
 - Project working directory
 - Best-effort Codex, Claude, terminal, and editor detection through process ancestry
 - One-click graceful termination with a force-stop fallback
+- Git branch badges for processes running inside repositories
+- Local ngrok tunnel management: launch, list, retarget, copy, open, and close
 
-Port Authority binds only to `127.0.0.1` and has no external services or dependencies.
+Port Authority binds only to `127.0.0.1`; its core port monitor has no external services or dependencies.
+
+## ngrok tunnel yard
+
+If the `ngrok` CLI is installed and authenticated, the tunnel yard reads the agent API on `127.0.0.1:4040`. Launching a tunnel can wake a sleeping agent automatically. Port Authority never reads or stores your ngrok authtoken.

@@ -1,4 +1,4 @@
-const state = { ports: [], query: '', killing: new Set() };
+const state = { ports: [], query: '', killing: new Set(), ngrok: null, ngrokBusy: new Set() };
 const $ = (selector) => document.querySelector(selector);
 const list = $('#portList');
 const refreshButton = $('#refreshButton');
@@ -38,8 +38,9 @@ function rowTemplate(item) {
   const key = `${item.pid}:${item.port}`;
   const isKilling = state.killing.has(key);
   const project = projectName(item.cwd, item.command);
+  const branchLabel = item.git?.detached ? `Detached at ${item.git.branch}` : item.git?.branch;
   const gitBadge = item.git
-    ? `<span class="branch-badge ${item.git.detached ? 'is-detached' : ''}" title="${item.git.detached ? 'Detached at commit' : 'Git branch'} ${escapeHtml(item.git.branch)}"><i>⑂</i>${escapeHtml(item.git.branch)}</span>`
+    ? `<span class="branch-badge ${item.git.detached ? 'is-detached' : ''}" tabindex="0" data-tooltip="${escapeHtml(branchLabel)}" aria-label="Git branch: ${escapeHtml(branchLabel)}"><i>⑂</i><span class="branch-name">${escapeHtml(item.git.branch)}</span></span>`
     : '';
   return `<article class="port-row ${isKilling ? 'is-killing' : ''}">
     <div class="port-cell">${vesselFor(item.sourceKey)}<small>BERTH</small><strong>${item.port}</strong><span class="owner-badge owner-${item.sourceKey}">${iconFor(item.sourceKey)} ${escapeHtml(item.source)}</span></div>
@@ -58,6 +59,39 @@ function render() {
   $('#claudeCount').textContent = String(state.ports.filter((item) => item.sourceKey === 'claude').length).padStart(2, '0');
   list.innerHTML = visible.length ? visible.map(rowTemplate).join('') : `<div class="empty-state"><span>${query ? '⌕' : '⚓'}</span><h3>${query ? 'No vessel answers that signal' : 'The harbor is calm'}</h3><p>${query ? 'Try another berth, crew, or project name.' : 'No vessels are docked on ports 3000–3999 right now.'}</p></div>`;
   list.setAttribute('aria-busy', 'false');
+  $('#activePorts').innerHTML = state.ports.map((item) => `<option value="${item.port}">${escapeHtml(projectName(item.cwd, item.command))}</option>`).join('');
+}
+
+function tunnelTemplate(tunnel) {
+  const busy = state.ngrokBusy.has(tunnel.name);
+  return `<article class="tunnel-row ${busy ? 'is-busy' : ''}">
+    <div class="public-passage"><div class="tunnel-icon"><i></i><b></b></div><div><span class="tunnel-name">${escapeHtml(tunnel.name)}</span><a href="${escapeHtml(tunnel.publicUrl)}" target="_blank" rel="noreferrer">${escapeHtml(tunnel.publicUrl)} ↗</a></div></div>
+    <label class="tunnel-target"><span>FORWARDS TO</span><div><b>localhost:</b><input type="number" min="3000" max="3999" value="${tunnel.port || ''}" data-tunnel-port="${escapeHtml(tunnel.name)}" aria-label="Target port for ${escapeHtml(tunnel.name)}"></div></label>
+    <div class="tunnel-traffic"><strong>${tunnel.connections}</strong><span>TOTAL CALLS</span><small>${tunnel.activeConnections} active now</small></div>
+    <div class="tunnel-actions">
+      <button type="button" class="copy-tunnel" data-url="${escapeHtml(tunnel.publicUrl)}" aria-label="Copy public URL for ${escapeHtml(tunnel.name)}">Copy</button>
+      <button type="button" class="retarget-tunnel" data-name="${escapeHtml(tunnel.name)}" ${busy ? 'disabled' : ''}>Retarget</button>
+      <button type="button" class="close-tunnel" data-name="${escapeHtml(tunnel.name)}" ${busy ? 'disabled' : ''} aria-label="Close tunnel ${escapeHtml(tunnel.name)}">×</button>
+    </div>
+  </article>`;
+}
+
+function renderNgrok() {
+  const status = $('#ngrokStatus');
+  const ngrokList = $('#ngrokList');
+  const data = state.ngrok;
+  if (!data) return;
+
+  status.className = `agent-status ${data.online ? 'is-online' : 'is-offline'}`;
+  status.innerHTML = `<span></span><div><strong>${data.online ? 'Agent online' : data.installed ? 'Agent sleeping' : 'ngrok missing'}</strong><small>${data.version ? `ngrok ${escapeHtml(data.version)}` : data.installed ? 'Launch a tunnel to wake it' : 'Install ngrok to continue'}</small></div>`;
+  $('#tunnelForm').querySelectorAll('input,button').forEach((element) => { element.disabled = !data.installed; });
+
+  if (!data.tunnels.length) {
+    ngrokList.innerHTML = `<div class="ngrok-empty"><span>🌊</span><h3>No tunnels at sea</h3><p>${data.installed ? 'Choose an occupied berth above and launch its first public passage.' : 'Install and configure ngrok, then return to launch a tunnel.'}</p></div>`;
+  } else {
+    ngrokList.innerHTML = data.tunnels.map(tunnelTemplate).join('');
+  }
+  ngrokList.setAttribute('aria-busy', 'false');
 }
 
 function toast(message, type = 'success') {
@@ -84,6 +118,31 @@ async function refresh({ quiet = false } = {}) {
   }
 }
 
+async function refreshNgrok({ quiet = false } = {}) {
+  try {
+    const response = await fetch('/api/ngrok', { cache: 'no-store' });
+    if (!response.ok) throw new Error('ngrok status failed');
+    state.ngrok = await response.json();
+    renderNgrok();
+  } catch {
+    if (!quiet) toast('Could not reach the ngrok harbor office', 'error');
+  }
+}
+
+async function ngrokAction(name, action) {
+  state.ngrokBusy.add(name);
+  renderNgrok();
+  try {
+    await action();
+    await refreshNgrok({ quiet: true });
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    state.ngrokBusy.delete(name);
+    renderNgrok();
+  }
+}
+
 async function killProcess(pid, port) {
   const key = `${pid}:${port}`;
   state.killing.add(key);
@@ -107,8 +166,67 @@ list.addEventListener('click', (event) => {
   const button = event.target.closest('.kill-button');
   if (button) killProcess(Number(button.dataset.pid), Number(button.dataset.port));
 });
+
+$('#tunnelForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const port = Number(new FormData(form).get('port'));
+  const name = String(new FormData(form).get('name') || '').trim() || `port-authority-${port}`;
+  const submit = form.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  submit.querySelector('span').textContent = 'Launching…';
+  try {
+    const response = await fetch('/api/ngrok/tunnels', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Port-Authority': '1' }, body: JSON.stringify({ port, name }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not launch tunnel');
+    toast(`Public passage opened for berth ${port}`);
+    form.reset();
+    await refreshNgrok({ quiet: true });
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    submit.disabled = false;
+    submit.querySelector('span').textContent = 'Launch tunnel';
+  }
+});
+
+$('#ngrokList').addEventListener('click', async (event) => {
+  const copy = event.target.closest('.copy-tunnel');
+  if (copy) {
+    try { await navigator.clipboard.writeText(copy.dataset.url); toast('Public URL copied to clipboard'); }
+    catch { toast('Could not copy the public URL', 'error'); }
+    return;
+  }
+
+  const close = event.target.closest('.close-tunnel');
+  if (close) {
+    const name = close.dataset.name;
+    await ngrokAction(name, async () => {
+      const response = await fetch(`/api/ngrok/tunnels/${encodeURIComponent(name)}`, { method: 'DELETE', headers: { 'X-Port-Authority': '1' } });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not close tunnel');
+      toast(`${name} returned to harbor`);
+    });
+    return;
+  }
+
+  const retarget = event.target.closest('.retarget-tunnel');
+  if (retarget) {
+    const name = retarget.dataset.name;
+    const input = document.querySelector(`[data-tunnel-port="${CSS.escape(name)}"]`);
+    const port = Number(input.value);
+    await ngrokAction(name, async () => {
+      const response = await fetch(`/api/ngrok/tunnels/${encodeURIComponent(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Port-Authority': '1' }, body: JSON.stringify({ port }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not retarget tunnel');
+      toast(`${name} now sails to berth ${port}`);
+    });
+  }
+});
 $('#searchInput').addEventListener('input', (event) => { state.query = event.target.value; render(); });
 refreshButton.addEventListener('click', () => refresh());
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh({ quiet: true }); });
 refresh();
+refreshNgrok();
 setInterval(() => { if (!document.hidden && !state.killing.size) refresh({ quiet: true }); }, 3000);
+setInterval(() => { if (!document.hidden && !state.ngrokBusy.size) refreshNgrok({ quiet: true }); }, 5000);

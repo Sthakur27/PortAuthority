@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,9 +12,10 @@ const HOST = '127.0.0.1';
 const DASHBOARD_PORT = Number(process.env.PORT_AUTHORITY_PORT || 4377);
 const RANGE_START = 3000;
 const RANGE_END = 3999;
+const NGROK_API = 'http://127.0.0.1:4040';
 const GIT_CACHE_TTL = 10_000;
 const gitCache = new Map();
-const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
+const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
 async function run(file, args) {
   try {
@@ -100,6 +101,108 @@ async function getPorts() {
   return Promise.all(listeners.map(processDetails)).then((items) => items.sort((a, b) => a.port - b.port));
 }
 
+async function ngrokRequest(path, options = {}) {
+  const response = await fetch(`${NGROK_API}${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    signal: AbortSignal.timeout(3000),
+  });
+  const payload = response.status === 204 ? null : await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.details?.err || payload?.msg || `ngrok returned ${response.status}`);
+  return payload;
+}
+
+function tunnelPort(tunnel) {
+  const addr = tunnel?.config?.addr || '';
+  const match = String(addr).match(/:(\d+)(?:\/)?$/) || String(addr).match(/^(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
+function normalizeTunnel(tunnel) {
+  return {
+    name: tunnel.name,
+    publicUrl: tunnel.public_url,
+    proto: tunnel.proto,
+    port: tunnelPort(tunnel),
+    target: tunnel?.config?.addr || '',
+    connections: tunnel?.metrics?.conns?.count || 0,
+    activeConnections: tunnel?.metrics?.conns?.gauge || 0,
+  };
+}
+
+function httpError(message, status = 400) {
+  return Object.assign(new Error(message), { status });
+}
+
+async function getNgrokStatus() {
+  const version = await run('/opt/homebrew/bin/ngrok', ['version']) || await run('/usr/local/bin/ngrok', ['version']);
+  try {
+    const data = await ngrokRequest('/api/tunnels');
+    return { installed: true, online: true, version: version.replace(/^ngrok version\s*/i, ''), tunnels: (data?.tunnels || []).map(normalizeTunnel) };
+  } catch {
+    return { installed: Boolean(version), online: false, version: version.replace(/^ngrok version\s*/i, ''), tunnels: [] };
+  }
+}
+
+async function ensureNgrokAgent() {
+  try {
+    await ngrokRequest('/api/tunnels');
+    return;
+  } catch {}
+
+  const binary = await run('/usr/bin/which', ['ngrok']);
+  if (!binary) throw new Error('ngrok is not installed');
+  const child = spawn(binary, ['start', '--none'], { detached: true, stdio: 'ignore' });
+  child.unref();
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    try {
+      await ngrokRequest('/api/tunnels');
+      return;
+    } catch {}
+  }
+  throw new Error('ngrok could not start. Check that your authtoken is configured.');
+}
+
+function validateTunnelInput(input) {
+  const port = Number(input.port);
+  if (!Number.isInteger(port) || port < RANGE_START || port > RANGE_END) throw httpError('Choose a port from 3000–3999');
+  const requestedName = String(input.name || `port-authority-${port}`).trim();
+  const name = requestedName.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 60);
+  if (!name) throw httpError('Enter a valid tunnel name');
+  return { port, name };
+}
+
+async function createTunnel(input) {
+  const { port, name } = validateTunnelInput(input);
+  const listeners = await getPorts();
+  if (!listeners.some((item) => item.port === port)) throw httpError(`Nothing is listening on port ${port}`, 409);
+  await ensureNgrokAgent();
+  return normalizeTunnel(await ngrokRequest('/api/tunnels', {
+    method: 'POST',
+    body: JSON.stringify({ name, addr: String(port), proto: 'http', bind_tls: true }),
+  }));
+}
+
+async function deleteTunnel(name) {
+  if (!name || !/^[a-zA-Z0-9_-]{1,80}$/.test(name)) throw httpError('Invalid tunnel name');
+  await ngrokRequest(`/api/tunnels/${encodeURIComponent(name)}`, { method: 'DELETE' });
+}
+
+async function updateTunnel(name, input) {
+  const { port } = validateTunnelInput({ ...input, name });
+  const current = (await ngrokRequest('/api/tunnels')).tunnels.find((tunnel) => tunnel.name === name);
+  if (!current) throw httpError('That tunnel is no longer active', 404);
+  const oldPort = tunnelPort(current);
+  await deleteTunnel(name);
+  try {
+    return await createTunnel({ name, port });
+  } catch (error) {
+    if (oldPort) await createTunnel({ name, port: oldPort }).catch(() => {});
+    throw error;
+  }
+}
+
 function sendJson(res, status, payload) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
   res.end(JSON.stringify(payload));
@@ -131,6 +234,10 @@ async function handleKill(req, res) {
   }
 }
 
+function requireLocalAction(req) {
+  if (req.headers['x-port-authority'] !== '1') throw Object.assign(new Error('Request rejected'), { status: 403 });
+}
+
 async function serveFile(pathname, res) {
   const relative = pathname === '/' ? 'index.html' : pathname.slice(1);
   if (!/^[a-zA-Z0-9._/-]+$/.test(relative) || relative.includes('..')) { res.writeHead(404); return res.end('Not found'); }
@@ -150,10 +257,25 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${HOST}:${DASHBOARD_PORT}`);
     if (req.method === 'GET' && url.pathname === '/api/ports') return sendJson(res, 200, { ports: await getPorts(), scannedAt: new Date().toISOString() });
+    if (req.method === 'GET' && url.pathname === '/api/ngrok') return sendJson(res, 200, await getNgrokStatus());
+    if (req.method === 'POST' && url.pathname === '/api/ngrok/tunnels') {
+      requireLocalAction(req);
+      return sendJson(res, 201, { tunnel: await createTunnel(await readJson(req)) });
+    }
+    const tunnelRoute = url.pathname.match(/^\/api\/ngrok\/tunnels\/([^/]+)$/);
+    if (tunnelRoute && req.method === 'DELETE') {
+      requireLocalAction(req);
+      await deleteTunnel(decodeURIComponent(tunnelRoute[1]));
+      return sendJson(res, 200, { ok: true });
+    }
+    if (tunnelRoute && req.method === 'PUT') {
+      requireLocalAction(req);
+      return sendJson(res, 200, { tunnel: await updateTunnel(decodeURIComponent(tunnelRoute[1]), await readJson(req)) });
+    }
     if (req.method === 'POST' && url.pathname === '/api/kill') return await handleKill(req, res);
     if (req.method === 'GET' || req.method === 'HEAD') return await serveFile(url.pathname, res);
     res.writeHead(405, { Allow: 'GET, HEAD, POST' }); res.end('Method not allowed');
-  } catch (error) { sendJson(res, 500, { error: error instanceof Error ? error.message : 'Unexpected error' }); }
+  } catch (error) { sendJson(res, error?.status || 500, { error: error instanceof Error ? error.message : 'Unexpected error' }); }
 });
 
 server.listen(DASHBOARD_PORT, HOST, () => console.log(`Port Authority is running at http://${HOST}:${DASHBOARD_PORT}`));
