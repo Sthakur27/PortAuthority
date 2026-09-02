@@ -38,17 +38,20 @@ function rowTemplate(item) {
   const key = `${item.pid}:${item.port}`;
   const isKilling = state.killing.has(key);
   const project = projectName(item.cwd, item.command);
+  const gitBadge = item.git
+    ? `<span class="branch-badge ${item.git.detached ? 'is-detached' : ''}" title="${item.git.detached ? 'Detached at commit' : 'Git branch'} ${escapeHtml(item.git.branch)}"><i>⑂</i>${escapeHtml(item.git.branch)}</span>`
+    : '';
   return `<article class="port-row ${isKilling ? 'is-killing' : ''}">
     <div class="port-cell">${vesselFor(item.sourceKey)}<small>BERTH</small><strong>${item.port}</strong><span class="owner-badge owner-${item.sourceKey}">${iconFor(item.sourceKey)} ${escapeHtml(item.source)}</span></div>
     <div class="process-cell"><div class="process-title"><span class="pulse-dot"></span>${escapeHtml(item.command)}</div><code title="${escapeHtml(item.fullCommand)}">${escapeHtml(commandLabel(item.fullCommand))}</code><span class="metadata">PID ${item.pid} <i></i> ${escapeHtml(item.elapsed || '—')} <i></i> ${escapeHtml(item.user || '—')}</span></div>
-    <div class="project-cell"><strong>${escapeHtml(project)}</strong><span title="${escapeHtml(item.cwd)}">${escapeHtml(shortPath(item.cwd))}</span></div>
+    <div class="project-cell"><div class="project-heading"><strong>${escapeHtml(project)}</strong>${gitBadge}</div><span title="${escapeHtml(item.cwd)}">${escapeHtml(shortPath(item.cwd))}</span></div>
     <div class="action-cell"><a class="open-button" href="http://localhost:${item.port}" target="_blank" rel="noreferrer" aria-label="Board server on port ${item.port}">Board ↗</a><button class="kill-button" type="button" data-pid="${item.pid}" data-port="${item.port}" ${isKilling ? 'disabled' : ''} aria-label="Clear ${escapeHtml(project)} from port ${item.port}"><span>${isKilling ? 'Casting off…' : 'Clear berth'}</span><b>×</b></button></div>
   </article>`;
 }
 
 function render() {
   const query = state.query.trim().toLowerCase();
-  const visible = state.ports.filter((item) => !query || `${item.port} ${item.source} ${item.cwd} ${item.fullCommand}`.toLowerCase().includes(query));
+  const visible = state.ports.filter((item) => !query || `${item.port} ${item.source} ${item.cwd} ${item.fullCommand} ${item.git?.branch || ''}`.toLowerCase().includes(query));
   $('#usedCount').textContent = String(state.ports.length).padStart(2, '0');
   $('#stampCount').textContent = String(state.ports.length).padStart(2, '0');
   $('#codexCount').textContent = String(state.ports.filter((item) => item.sourceKey === 'codex').length).padStart(2, '0');

@@ -12,6 +12,8 @@ const HOST = '127.0.0.1';
 const DASHBOARD_PORT = Number(process.env.PORT_AUTHORITY_PORT || 4377);
 const RANGE_START = 3000;
 const RANGE_END = 3999;
+const GIT_CACHE_TTL = 10_000;
+const gitCache = new Map();
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
 
 async function run(file, args) {
@@ -49,6 +51,28 @@ function sourceFrom(commands) {
   return { source: 'Other', sourceKey: 'other' };
 }
 
+async function gitDetails(cwd) {
+  if (!cwd) return null;
+  const cached = gitCache.get(cwd);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  let value = null;
+  const insideWorkTree = await run('/usr/bin/git', ['-C', cwd, 'rev-parse', '--is-inside-work-tree']);
+  if (insideWorkTree === 'true') {
+    const root = await run('/usr/bin/git', ['-C', cwd, 'rev-parse', '--show-toplevel']);
+    const branch = await run('/usr/bin/git', ['-C', cwd, 'symbolic-ref', '--quiet', '--short', 'HEAD']);
+    if (branch) {
+      value = { branch, detached: false, root };
+    } else {
+      const commit = await run('/usr/bin/git', ['-C', cwd, 'rev-parse', '--short', 'HEAD']);
+      if (commit) value = { branch: commit, detached: true, root };
+    }
+  }
+
+  gitCache.set(cwd, { value, expiresAt: Date.now() + GIT_CACHE_TTL });
+  return value;
+}
+
 async function processDetails(listener) {
   const ancestry = [];
   let currentPid = listener.pid;
@@ -66,7 +90,8 @@ async function processDetails(listener) {
   }
   const cwdOutput = await run('/usr/sbin/lsof', ['-a', '-p', String(listener.pid), '-d', 'cwd', '-Fn']);
   const cwd = cwdOutput.split('\n').find((line) => line.startsWith('n'))?.slice(1) || '';
-  return { ...listener, ...sourceFrom(ancestry), user: first?.user || '', elapsed: first?.elapsed || '', fullCommand: first?.command || listener.command, cwd };
+  const git = await gitDetails(cwd);
+  return { ...listener, ...sourceFrom(ancestry), user: first?.user || '', elapsed: first?.elapsed || '', fullCommand: first?.command || listener.command, cwd, git };
 }
 
 async function getPorts() {
