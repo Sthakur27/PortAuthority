@@ -12,6 +12,18 @@
       <div class="top-actions"><div class="live-pill"><span></span> Harbor patrol active</div><div class="range-tag">WATERS 3000–3999</div><button class="icon-button" id="refreshButton" type="button" aria-label="Sweep harbor again" title="Sweep harbor again"><span class="refresh-icon">↻</span></button></div>
     </header>
     <main>
+      <nav class="view-nav" aria-label="Dashboard views"><button type="button" data-view="ports" aria-pressed="true">⚓ Ports & tunnels</button><button type="button" data-view="processes" aria-pressed="false">◉ Processes</button></nav>
+      <section id="processView" hidden aria-labelledby="processHeading">
+        <p class="section-number">THE ENGINE ROOM</p><h2 id="processHeading">Give your Mac some breathing room.</h2>
+        <p>Find the biggest apps, select what you’re done with, and quit them together.</p>
+        <div class="process-summary" id="processSummary">Loading memory usage…</div>
+        <div class="process-filters"><input type="search" id="processSearch" aria-label="Search apps or PID" placeholder="Search apps or PID…"><select id="processKind" aria-label="Process type"><option value="all">Apps & developer processes</option value="App">Apps only</option><option value="Developer">Developer processes only</option></select><select id="processSort" aria-label="Sort processes"><option value="memory">Most memory</option><option value="cpu">Most CPU</option><option value="name">Name A–Z</option></select><button id="processRefresh">Refresh</button></div>
+        <div class="process-bulk"><label><input type="checkbox" id="processSelectAll"> Select visible</label><span id="processSelected">Nothing selected</span><button id="processQuit" disabled>Quit selected</button><button id="processForce" disabled>Force quit…</button></div>
+        <p class="process-note">Memory is estimated resident memory, summed across app helpers. Shared memory may be counted twice; it differs from Activity Monitor and isn’t guaranteed recoverable RAM. macOS services are excluded. Quit allows apps to show save prompts.</p>
+        <p id="processStatus" role="status"></p>
+        <div class="process-table-wrap"><table class="process-table"><thead><tr><th>Select</th><th>App / process</th><th>Memory</th><th>CPU</th><th>Processes</th></tr></thead><tbody id="processRows"></tbody></table></div>
+        <dialog id="forceDialog"><h3>Force quit selected apps?</h3><p id="forceNames"></p><p>Unsaved changes may be lost. This also stops the selected app’s listed helper processes.</p><div><button id="forceCancel">Cancel</button><button id="forceConfirm">Force quit</button></div></dialog>
+      </section>
       <section class="hero">
         <div class="hero-copy"><p class="eyebrow">⚑ HARBOR MASTER'S LOG / LOCALHOST</p><h1>Full steam<br><em>ahead.</em></h1><p class="lede">Track every dev server sailing through the 3000s. Meet the crew, inspect the manifest, or send a vessel on its merry way.</p></div>
         <div class="harbor-scene" aria-hidden="true">
@@ -53,5 +65,6 @@
     </main>
   </div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div><script src="/app.js?v=7" defer></script>
+  <link rel="stylesheet" href="/processes.css?v=1"><script src="/processes.js?v=1" defer></script>
 </body>
 </html>

@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { getProcesses, stopProcesses } from './processes.mjs';
 import { execFile, spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
@@ -256,6 +257,12 @@ async function serveFile(pathname, res) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${HOST}:${DASHBOARD_PORT}`);
+    if (url.pathname.startsWith('/api/processes')) {
+      const allowedHosts = [`${HOST}:${DASHBOARD_PORT}`, `localhost:${DASHBOARD_PORT}`];
+      if (!allowedHosts.includes(req.headers.host) || (req.headers.origin && !allowedHosts.map(h=>`http://${h}`).includes(req.headers.origin))) return sendJson(res,403,{error:'Local access required'});
+      if(req.method==='GET' && url.pathname==='/api/processes') return sendJson(res,200,await getProcesses());
+      if(req.method==='POST' && url.pathname==='/api/processes/stop') { requireLocalAction(req); return sendJson(res,200,await stopProcesses(await readJson(req))); }
+    }
     if (req.method === 'GET' && url.pathname === '/api/ports') return sendJson(res, 200, { ports: await getPorts(), scannedAt: new Date().toISOString() });
     if (req.method === 'GET' && url.pathname === '/api/ngrok') return sendJson(res, 200, await getNgrokStatus());
     if (req.method === 'POST' && url.pathname === '/api/ngrok/tunnels') {

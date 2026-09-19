@@ -1,6 +1,8 @@
 
 # Port Authority
 
+The **Processes** tab groups your open apps and their helpers by estimated resident memory. Search, sort by memory or CPU, select multiple apps, and choose Quit. Normal app Quit uses macOS termination requests so save prompts can appear. Force Quit is a separate confirmed action and can lose unsaved work. Developer processes receive SIGTERM for Quit. macOS services and other users' processes are excluded; the dashboard and its ancestors are protected. Selections are checked against process start times before signaling and expire after two minutes. Memory totals sum RSS (shared pages may be counted twice), not Activity Monitor's memory footprint. Refreshes every five seconds while the tab is active.
+
 Your harbor master for localhost. Port Authority watches ports 3000–3999, identifies the process and its likely launch environment, and lets you open or stop local development servers from one dashboard.
 
 

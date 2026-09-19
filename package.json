@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "node --watch server.mjs",
     "start": "node server.mjs",
-    "build": "node --check server.mjs && node --check public/app.js"
+    "build": "node --check server.mjs && node --check processes.mjs && node --check public/app.js && node --check public/processes.js",
+    "test": "node --test processes.test.mjs"
   },
   "type": "module"
 }
