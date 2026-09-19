@@ -14,17 +14,19 @@
     <main>
       <nav class="view-nav" aria-label="Dashboard views"><button type="button" data-view="ports" aria-pressed="true">⚓ Ports & tunnels</button><button type="button" data-view="processes" aria-pressed="false">◉ Processes</button></nav>
       <section id="processView" hidden aria-labelledby="processHeading">
+        <section id="memoryOverview" class="memory-overview" aria-label="Mac memory overview"><p>Reading your Mac’s memory…</p></section>
         <p class="section-number">THE ENGINE ROOM</p><h2 id="processHeading">Give your Mac some breathing room.</h2>
         <p>Find the biggest apps, select what you’re done with, and quit them together.</p>
         <div class="process-summary" id="processSummary">Loading memory usage…</div>
         <section class="quick-quit" aria-labelledby="quickQuitHeading">
           <div class="quick-quit-heading"><div><h3 id="quickQuitHeading">⚓ Your quick-quit crew</h3><p>Mark apps you’re happy to close. Your choices stay saved in this browser, even after the apps close.</p></div><button id="processFreeMemory" disabled>Free up memory</button></div>
           <p id="quickQuitSummary">Turn on Quick quit next to an app to add it here.</p>
+          <div id="quickQuitChart" class="crew-chart"></div>
           <div id="quickQuitApps" class="quick-quit-apps"></div>
           <p class="process-note">Only runs when you click. Quits all running marked apps, regardless of filters. Uses normal Quit, never Force Quit; apps can still ask to save.</p>
           <p id="quickQuitStorageStatus" role="status"></p>
         </section>
-        <div class="process-filters"><input type="search" id="processSearch" aria-label="Search apps or PID" placeholder="Search apps or PID…"><select id="processKind" aria-label="Process type"><option value="all">Apps & developer processes</option value="App">Apps only</option><option value="Developer">Developer processes only</option></select><select id="processSort" aria-label="Sort processes"><option value="memory">Most memory</option><option value="cpu">Most CPU</option><option value="name">Name A–Z</option></select><button id="processRefresh">Refresh</button></div>
+        <div class="process-filters"><input type="search" id="processSearch" aria-label="Search apps or PID" placeholder="Search apps or PID…"><select id="processKind" aria-label="Process type"><option value="all">Apps & developer processes</option><option value="App">Apps only</option><option value="Developer">Developer processes only</option></select><select id="processSort" aria-label="Sort processes"><option value="memory">Most memory</option><option value="cpu">Most CPU</option><option value="name">Name A–Z</option></select><button id="processRefresh">Refresh</button></div>
         <div class="process-bulk"><label><input type="checkbox" id="processSelectAll"> Select visible</label><span id="processSelected">Nothing selected</span><button id="processQuit" disabled>Quit selected</button><button id="processForce" disabled>Force quit…</button></div>
         <p class="process-note">Memory is estimated resident memory, summed across app helpers. Shared memory may be counted twice; it differs from Activity Monitor and isn’t guaranteed recoverable RAM. macOS services are excluded. Quit allows apps to show save prompts.</p>
         <p id="processStatus" role="status"></p>
@@ -72,6 +74,6 @@
     </main>
   </div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div><script src="/app.js?v=7" defer></script>
-  <link rel="stylesheet" href="/processes.css?v=2"><script src="/processes.js?v=2" defer></script>
+  <link rel="stylesheet" href="/processes.css?v=4"><script src="/processes.js?v=4" defer></script>
 </body>
 </html>

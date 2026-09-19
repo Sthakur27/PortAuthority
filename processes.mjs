@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { totalmem } from 'node:os';
 import { basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { readMemory } from './memory.mjs';
 const exec = promisify(execFile);
 const tickets = new Map();
 
@@ -35,10 +36,12 @@ export function groupProcesses(rows, uid, selfPid) {
   return [...groups.values()].map(g=>({ ...g, protected:g.members.some(p=>protectedPids.has(p.pid)), root:g.app?g.members.find(p=>p.executable.startsWith(g.app+'/Contents/MacOS/')):g.members[0] })).sort((a,b)=>b.memory-a.memory);
 }
 export async function getProcesses() {
-  const groups=groupProcesses(await scan(),process.getuid(),process.pid);
+  const total=totalmem();
+  const [rows,memory]=await Promise.all([scan(),readMemory(total)]);
+  const groups=groupProcesses(rows,process.getuid(),process.pid);
   const now=Date.now();
   for(const [id,t] of tickets) if(t.expires<now) tickets.delete(id);
-  return { totalMemory:totalmem(), scannedAt:new Date().toISOString(), groups:groups.map(g=>{
+  return { totalMemory:total, memory, scannedAt:new Date().toISOString(), groups:groups.map(g=>{
     const token=randomUUID(); tickets.set(token,{group:g,expires:now+120000});
     return { key:g.key, token, identity:g.members.map(p=>`${p.pid}:${p.started}`).join('|'), name:g.name, kind:g.kind, memory:g.memory,cpu:g.cpu, count:g.members.length, pids:g.members.map(p=>p.pid), executable:g.app||g.members[0].executable, protected:g.protected||!g.root, reason:g.protected?'Keeps Port Authority running':!g.root?'App owner unavailable':null };
   }) };

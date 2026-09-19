@@ -18,8 +18,32 @@
     catch {$('#quickQuitStorageStatus').textContent='Browser storage is unavailable. These choices will only last for this session.';}
   }
   const quickGroups=()=> (data?.groups||[]).filter(g=>g.kind==='App'&&!g.protected&&saved.has(g.key));
+  const chartColors=['#087fdb','#904bd8','#df6840','#008577','#b34683','#8b6500'];
+  function renderMemory() {
+    const m=data?.memory;
+    if(!m){$('#memoryOverview').innerHTML='<h3>Memory overview unavailable</h3><p>Could not read system memory. App estimates remain available below.</p>';return;}
+    const labels={normal:'Room to breathe',elevated:'RAM getting full',high:'RAM nearly full'};
+    const parts=[['Apps & services',m.apps,'#087fdb'],['System / wired',m.system,'#244669'],['Compressed',m.compressed,'#904bd8'],['Cache / free',m.available,'#b8e4d6']];
+    $('#memoryOverview').innerHTML=`<div class="memory-heading"><div><p class="section-number">MAC MEMORY · LIVE</p><strong class="memory-number">${Math.round(m.percent)}% <span>used</span></strong><p>${bytes(m.used)} used / ${bytes(m.total)} total RAM</p></div><div class="memory-signal ${m.level}"><span></span>${labels[m.level]}</div></div><div class="memory-bar" role="img" aria-label="${Math.round(m.percent)} percent RAM used. ${parts.map(([name,value])=>`${name}: ${bytes(value)}`).join('. ')}">${parts.map(([name,value])=>`<span title="${name}: ${bytes(value)}"></span>`).join('')}</div><div class="memory-legend">${parts.map(([name,value])=>`<span><i></i>${name}<b>${bytes(value)}</b></span>`).join('')}</div><p class="process-note">Estimated physical RAM breakdown from macOS. Apps & services = non-purgeable anonymous memory; wired includes system and app allocations. Cache / free is the remaining RAM. Usage indicator: amber ≥75%, red ≥90%; not macOS Memory Pressure.</p><p id="memoryFreshness" class="process-note">Updated ${new Date(data.scannedAt).toLocaleTimeString()}</p>`;
+    // Set individual CSS properties from trusted data; keep the strict CSP intact.
+    document.querySelectorAll('.memory-bar > span').forEach((el,i)=>{el.style.width=`${parts[i][1]/m.total*100}%`;el.style.backgroundColor=parts[i][2];});
+    document.querySelectorAll('.memory-legend i').forEach((el,i)=>{el.style.backgroundColor=parts[i][2];});
+  }
+  function renderCrewChart(groups) {
+    const sorted=[...groups].filter(g=>g.memory>0).sort((a,b)=>b.memory-a.memory);
+    const total=sorted.reduce((sum,g)=>sum+g.memory,0);
+    if(!total){$('#quickQuitChart').innerHTML='<div class="crew-donut empty" aria-hidden="true"><span>—</span></div><p class="process-note">Your crew’s memory breakdown will appear here once marked apps are running.</p>';return;}
+    const slices=sorted.slice(0,5);
+    if(sorted.length>5)slices.push({name:`Other marked apps (${sorted.length-5})`,memory:sorted.slice(5).reduce((sum,g)=>sum+g.memory,0)});
+    let start=0;
+    const stops=slices.map((g,i)=>{const end=start+g.memory/total*100;const stop=`${chartColors[i]} ${start}% ${end}%`;start=end;return stop;});
+    $('#quickQuitChart').innerHTML=`<div class="crew-donut" role="img" aria-label="Quick quit crew: ${bytes(total)} estimated resident memory. ${slices.map(g=>`${escape(g.name)}: ${bytes(g.memory)}`).join('. ')}"><span><strong>${bytes(total)}</strong><small>crew total</small></span></div><div class="crew-legend">${slices.map(g=>`<div><i></i><span>${escape(g.name)}</span><b>${bytes(g.memory)}</b><small>${Math.round(g.memory/total*100)}%</small></div>`).join('')}<p class="process-note">Share of your running, quittable crew’s estimated memory—not a share of total RAM. Shared pages can be counted twice.</p></div>`;
+    document.querySelectorAll('.crew-donut').forEach(el=>{el.style.backgroundImage=`conic-gradient(${stops.join(',')})`;});
+    document.querySelectorAll('.crew-legend i').forEach((el,i)=>{el.style.backgroundColor=chartColors[i];});
+  }
   function renderQuick() {
     const groups=quickGroups();
+    renderCrewChart(groups);
     $('#processFreeMemory').disabled=busy||loading||!groups.length;
     $('#processFreeMemory').textContent=busy?'Working…':'Free up memory';
     $('#quickQuitSummary').textContent=groups.length?`${groups.length} marked ${groups.length===1?'app':'apps'} running · ${bytes(groups.reduce((s,g)=>s+g.memory,0))} estimated memory (not guaranteed recoverable)`:saved.size?'No marked apps are currently available to quit.':'Turn on Quick quit next to an app to add it here.';
@@ -41,6 +65,7 @@
   function render() {
     renderQuick();
     if(!data)return;
+    renderMemory();
     $('#processSummary').textContent=`${bytes(data.totalMemory)} installed RAM · ${data.groups.length} app / developer groups · Updated ${new Date(data.scannedAt).toLocaleTimeString()}`;
     const rows=visible();
     $('#processRows').innerHTML=rows.length?rows.map(g=>`<tr><td><input type="checkbox" data-key="${escape(g.key)}" aria-label="Select ${escape(g.name)}" ${selected.has(g.key)?'checked':''} ${g.protected||busy?'disabled':''}></td><td><strong>${escape(g.name)}</strong><small>${escape(g.kind)} · ${escape(g.executable)}</small>${g.protected?`<small>${escape(g.reason)}</small>`:''}</td><td><b>${bytes(g.memory)}</b></td><td>${g.cpu.toFixed(1)}%</td><td><details><summary>${g.count} ${g.count===1?'process':'processes'}</summary><small>PID ${g.pids.join(', ')}</small></details></td><td>${g.kind==='App'?`<label class="quick-toggle"><input type="checkbox" role="switch" data-quick="${escape(g.key)}" aria-label="Quick quit ${escape(g.name)}" ${saved.has(g.key)?'checked':''} ${busy||g.protected?'disabled':''}><span aria-hidden="true"></span></label>`:'<small>Apps only</small>'}</td></tr>`).join(''):'<tr><td colspan="6">No matching apps or processes.</td></tr>';
@@ -53,7 +78,7 @@
       for(const [key,old] of selected){const fresh=data.groups.find(g=>g.key===key&&!g.protected&&g.identity===old.identity);if(fresh)selected.set(key,fresh);else selected.delete(key);}
       render();
       $('#processStatus').textContent='';
-    } catch(e){$('#processStatus').textContent=`${e.message}. Last successful data may be stale.`;}finally{loading=false;renderQuick();}
+    } catch(e){$('#processStatus').textContent=`${e.message}. Last successful data may be stale.`;$('#memoryOverview').innerHTML='<h3>Memory reading unavailable</h3><p>Refresh to try again. Previous readings may be stale.</p>';}finally{loading=false;renderQuick();}
   }
   async function stop(mode,quick=false) {
     if(busy||(quick&&loading))return;

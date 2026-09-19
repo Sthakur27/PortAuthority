@@ -5,6 +5,8 @@ The **Processes** tab groups your open apps and their helpers by estimated resid
 
 Turn on **Quick quit** beside apps you are happy to close, then use **Free up memory** to request normal Quit for all running marked apps (independent of table filters). Choices are remembered by app path in this browser's local storage, including apps that are no longer running; remove them using the × on their saved chip. Nothing quits automatically, and protected apps are always skipped. The action refreshes process identities first and never escalates to Force Quit. Reported memory is an estimate, not a promise of RAM recovered.
 
+The top memory bar estimates physical RAM categories from macOS `vm_stat`: apps/services (anonymous minus purgeable pages), system/wired, compressed storage, and remaining cache/free RAM. Its usage indicator turns amber at 75% and red at 90%; this is an occupancy threshold, **not macOS Memory Pressure** or an exact Activity Monitor replica. Wired allocations can include apps, and anonymous allocations include background services. Failed readings display unavailable instead of a healthy zero. The Quick quit donut shows each running, unprotected marked app's share of the crew's summed RSS; it is not a partition of physical RAM. The five largest apps get individual slices, with remaining marked apps grouped together.
+
 Your harbor master for localhost. Port Authority watches ports 3000–3999, identifies the process and its likely launch environment, and lets you open or stop local development servers from one dashboard.
 
 

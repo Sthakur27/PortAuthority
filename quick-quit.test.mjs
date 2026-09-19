@@ -44,12 +44,16 @@ test('quick quit ignores filters and bulk selection, uses refreshed tokens, skip
   assert.deepEqual(JSON.parse(stops[0].options.body),{tokens:['fresh-spotify'],mode:'quit'});
   assert.match(h.get('#quickQuitApps').innerHTML,/Spotify/);
   assert.match(h.get('#processStatus').textContent,/requested/);
+  assert.match(h.get('#quickQuitChart').innerHTML,/crew total/);
+  assert.match(h.get('#quickQuitChart').innerHTML,/Spotify/);
+  assert.doesNotMatch(h.get('#quickQuitChart').innerHTML,/Loom/);
 });
 
 test('does not send a stop request when marked app has closed',async()=>{
   const h=harness();await h.open();await h.toggle('Spotify');h.setGroups([]);await h.free();
   assert.equal(h.calls.filter(c=>c.url.endsWith('/stop')).length,0);
   assert.equal(h.get('#processFreeMemory').disabled,true);
+  assert.match(h.get('#quickQuitChart').innerHTML,/breakdown will appear/);
 });
 
 test('storage failures keep session choices and show an honest warning',async()=>{
