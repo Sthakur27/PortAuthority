@@ -3,6 +3,8 @@
 
 The **Processes** tab groups your open apps and their helpers by estimated resident memory. Search, sort by memory or CPU, select multiple apps, and choose Quit. Normal app Quit uses macOS termination requests so save prompts can appear. Force Quit is a separate confirmed action and can lose unsaved work. Developer processes receive SIGTERM for Quit. macOS services and other users' processes are excluded; the dashboard and its ancestors are protected. Selections are checked against process start times before signaling and expire after two minutes. Memory totals sum RSS (shared pages may be counted twice), not Activity Monitor's memory footprint. Refreshes every five seconds while the tab is active.
 
+Turn on **Quick quit** beside apps you are happy to close, then use **Free up memory** to request normal Quit for all running marked apps (independent of table filters). Choices are remembered by app path in this browser's local storage, including apps that are no longer running; remove them using the × on their saved chip. Nothing quits automatically, and protected apps are always skipped. The action refreshes process identities first and never escalates to Force Quit. Reported memory is an estimate, not a promise of RAM recovered.
+
 Your harbor master for localhost. Port Authority watches ports 3000–3999, identifies the process and its likely launch environment, and lets you open or stop local development servers from one dashboard.
 
 
