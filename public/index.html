@@ -12,7 +12,7 @@
       <div class="top-actions"><div class="live-pill"><span></span> Harbor patrol active</div><div class="range-tag">WATERS 3000–3999</div><button class="icon-button" id="refreshButton" type="button" aria-label="Sweep harbor again" title="Sweep harbor again"><span class="refresh-icon">↻</span></button></div>
     </header>
     <main>
-      <nav class="view-nav" aria-label="Dashboard views"><button type="button" data-view="ports" aria-pressed="true">⚓ Ports & tunnels</button><button type="button" data-view="processes" aria-pressed="false">◉ Processes</button></nav>
+      <nav class="view-nav" aria-label="Dashboard views"><a href="/ports" data-view="ports" aria-current="page">⚓ Ports & tunnels</a><a href="/processes" data-view="processes">◉ Processes</a></nav>
       <section id="processView" hidden aria-labelledby="processHeading">
         <section id="memoryOverview" class="memory-overview" aria-label="Mac memory overview"><p>Reading your Mac’s memory…</p></section>
         <p class="section-number">THE ENGINE ROOM</p><h2 id="processHeading">Give your Mac some breathing room.</h2>
@@ -74,6 +74,6 @@
     </main>
   </div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div><script src="/app.js?v=7" defer></script>
-  <link rel="stylesheet" href="/processes.css?v=4"><script src="/processes.js?v=4" defer></script>
+  <link rel="stylesheet" href="/processes.css?v=5"><script src="/processes.js?v=5" defer></script>
 </body>
 </html>

@@ -240,7 +240,7 @@ function requireLocalAction(req) {
 }
 
 async function serveFile(pathname, res) {
-  const relative = pathname === '/' ? 'index.html' : pathname.slice(1);
+  const relative = ['/', '/ports', '/ports/', '/processes', '/processes/'].includes(pathname) ? 'index.html' : pathname.slice(1);
   if (!/^[a-zA-Z0-9._/-]+$/.test(relative) || relative.includes('..')) { res.writeHead(404); return res.end('Not found'); }
   try {
     const file = await readFile(join(PUBLIC, relative));

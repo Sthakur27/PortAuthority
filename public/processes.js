@@ -95,12 +95,25 @@
       const response=await fetch('/api/processes/stop',{method:'POST',headers:{'Content-Type':'application/json','X-Port-Authority':'1'},body:JSON.stringify({tokens,mode})});const result=await response.json();if(!response.ok)throw new Error(result.error);if(!quick)selected.clear();busy=false;await refresh();$('#processStatus').textContent=result.results.map(r=>`${r.name}: ${r.status}`).join(' · ');}
     catch(e){$('#processStatus').textContent=e.message;}finally{busy=false;render();}
   }
-  document.querySelectorAll('[data-view]').forEach(button=>button.addEventListener('click',()=>{
-    active=button.dataset.view==='processes';$('#processView').hidden=!active;
+  function showRoute() {
+    active=/^\/processes\/?$/.test(window.location.pathname);$('#processView').hidden=!active;
     document.querySelectorAll('main > .hero, main > .stats, main > .board, main > .tunnel-yard').forEach(el=>el.hidden=active);
-    document.querySelectorAll('[data-view]').forEach(el=>el.setAttribute('aria-pressed',String(el===button)));
+    document.querySelectorAll('[data-view]').forEach(el=>{
+      if(el.dataset.view===(active?'processes':'ports'))el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');
+    });
+    document.title=active?'Processes — Port Authority':'Ports & tunnels — Port Authority';
     if(active)refresh();
+  }
+  document.querySelectorAll('[data-view]').forEach(link=>link.addEventListener('click',event=>{
+    // Preserve native new-tab / modifier-click behavior for these real links.
+    if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+    event.preventDefault();
+    const path=link.getAttribute('href');
+    if(window.location.pathname!==path)window.history.pushState(null,'',path);
+    showRoute();
   }));
+  window.addEventListener('popstate',showRoute);
+  showRoute();
   $('#processRows').addEventListener('change',event=>{const key=event.target.dataset.key;if(!key)return;const g=data.groups.find(g=>g.key===key);if(event.target.checked&&g&&!g.protected)selected.set(key,g);else selected.delete(key);bulk();});
   $('#processRows').addEventListener('change',event=>{
     const key=event.target.dataset.quick;if(!key||busy)return;

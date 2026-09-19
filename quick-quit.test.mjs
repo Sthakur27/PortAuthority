@@ -5,22 +5,35 @@ import vm from 'node:vm';
 
 const source=readFileSync(new URL('./public/processes.js',import.meta.url),'utf8');
 const app=(name,extra={})=>({key:`/Applications/${name}.app`,name,kind:'App',token:name,identity:name,memory:1024**3,cpu:0,count:1,pids:[123],executable:name,protected:false,...extra});
-function harness(storage=new Map(),storageFails=false) {
-  const nodes=new Map(),calls=[],views=[{dataset:{view:'processes'}}];
+function harness(storage=new Map(),storageFails=false,path='/') {
+  const nodes=new Map(),calls=[],views=[{dataset:{view:'processes'}},{dataset:{view:'ports'}}];
+  const windowEvents={},location={pathname:path},history=[];
   let groups=[app('Spotify'),app('Loom'),app('Codex',{protected:true})];
-  function element(node={}) {return Object.assign(node,{textContent:'',innerHTML:'',value:'',listeners:{},addEventListener(type,fn){(this.listeners[type]??=[]).push(fn);},setAttribute(){},contains(){return false;},matches(){return false;},async fire(type,event={}){for(const fn of this.listeners[type]||[])await fn(event);}});}
+  function element(node={}) {return Object.assign(node,{textContent:'',innerHTML:'',value:'',listeners:{},addEventListener(type,fn){(this.listeners[type]??=[]).push(fn);},setAttribute(){},removeAttribute(){},getAttribute(){return '/'+this.dataset.view;},contains(){return false;},matches(){return false;},async fire(type,event={button:0,preventDefault(){}}){for(const fn of this.listeners[type]||[])await fn(event);}});}
   views.forEach(element);
   const get=id=>{if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);};
   get('#processKind').value='all';get('#processSort').value='memory';
   vm.runInNewContext(source,{
     document:{querySelector:get,querySelectorAll:selector=>selector==='[data-view]'?views:[]},
-    window:{addEventListener(){}},setInterval(){},
+    window:{location,history:{pushState(_state,_title,url){history.push(url);location.pathname=url;}},addEventListener(name,fn){windowEvents[name]=fn;}},setInterval(){},
     localStorage:{getItem:key=>{if(storageFails)throw Error();return storage.get(key)||null;},setItem:(key,value)=>{if(storageFails)throw Error();storage.set(key,value);}},
     fetch:async(url,options)=>{calls.push({url,options});return {ok:true,json:async()=>url.endsWith('/stop')?{results:[{name:'Spotify',status:'requested'}]}:{groups,totalMemory:16*1024**3,scannedAt:new Date().toISOString()}};}
   });
   const settle=()=>new Promise(resolve=>setImmediate(resolve));
-  return {get,calls,storage,setGroups(value){groups=value;},async open(){await views[0].fire('click');await settle();},async toggle(name,checked=true){await get('#processRows').fire('change',{target:{dataset:{quick:`/Applications/${name}.app`},checked}});},async free(){await get('#processFreeMemory').fire('click');await settle();}};
+  return {get,calls,storage,location,history,views,async pop(path){location.pathname=path;windowEvents.popstate();await settle();},setGroups(value){groups=value;},async open(){await views[0].fire('click');await settle();},async toggle(name,checked=true){await get('#processRows').fire('change',{target:{dataset:{quick:`/Applications/${name}.app`},checked}});},async free(){await get('#processFreeMemory').fire('click');await settle();}};
 }
+
+test('routes support direct entry, navigation and back/forward without duplicate history',async()=>{
+  const h=harness(new Map(),false,'/processes/');
+  assert.equal(h.get('#processView').hidden,false);
+  await h.views[1].fire('click');assert.equal(h.location.pathname,'/ports');assert.equal(h.get('#processView').hidden,true);
+  await h.open();assert.equal(h.location.pathname,'/processes');
+  await h.open();assert.equal(h.history.length,2);
+  await h.pop('/ports');assert.equal(h.get('#processView').hidden,true);
+  await h.pop('/processes');assert.equal(h.get('#processView').hidden,false);
+  await h.views[1].fire('click',{button:0,metaKey:true,preventDefault(){throw Error('Must preserve modifier clicks');}});
+  assert.equal(h.location.pathname,'/processes');
+});
 
 test('remembers apps across reloads and keeps closed apps removable',async()=>{
   const first=harness();await first.open();await first.toggle('Spotify');
