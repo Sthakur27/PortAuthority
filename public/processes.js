@@ -29,6 +29,20 @@
     document.querySelectorAll('.memory-bar > span').forEach((el,i)=>{el.style.width=`${parts[i][1]/m.total*100}%`;el.style.backgroundColor=parts[i][2];});
     document.querySelectorAll('.memory-legend i').forEach((el,i)=>{el.style.backgroundColor=parts[i][2];});
   }
+  const cpuPercent=value=>Number.isFinite(value)?`${value.toFixed(1)}%`:'Sampling…';
+  function renderCPU() {
+    const cpu=data?.cpu;
+    if(!cpu){$('#cpuOverview').innerHTML='<h3>CPU reading unavailable</h3><p>Refresh to try again.</p>';return;}
+    const level=cpu.percent>=90?'high':cpu.percent>=75?'elevated':'normal';
+    const history=cpu.history||[];
+    const end=history.at(-1)?.at||Date.now();
+    const points=history.map(p=>`${Math.max(0,300-(end-p.at)/1000)},${100-p.percent}`).join(' ');
+    $('#cpuOverview').innerHTML=`<div class="memory-heading"><div><p class="section-number">MAC CPU · LIVE</p><strong class="memory-number">${Math.round(cpu.percent)}% <span>busy</span></strong><p>Across ${cpu.cores} logical cores · ${Math.round(100-cpu.percent)}% idle</p></div><div class="memory-signal ${level}"><span></span>${level==='high'?'CPU nearly full':level==='elevated'?'CPU getting busy':'CPU has headroom'}</div></div><svg class="cpu-history" viewBox="0 0 300 100" preserveAspectRatio="none" role="img" aria-label="Total CPU history, last five minutes, zero to 100 percent"><path d="M0 25H300 M0 50H300 M0 75H300" class="cpu-grid"/><polyline points="${points}"/>${history.map(p=>`<circle cx="${Math.max(0,300-(end-p.at)/1000)}" cy="${100-p.percent}" r="1.2"/>`).join('')}</svg><div class="cpu-axis"><span>5 minutes ago</span><span>Now</span></div><p class="process-note">One-second samples, refreshed every five seconds while viewing. Total includes system services; the app list below excludes them.</p><p class="process-note">Updated ${new Date(data.scannedAt).toLocaleTimeString()}</p>`;
+  }
+  function renderTopCPU() {
+    const groups=[...(data?.groups||[])].filter(g=>g.cpu>0).sort((a,b)=>b.cpu-a.cpu).slice(0,5);
+    $('#cpuUsers').innerHTML=groups.length?groups.map(g=>`<article class="cpu-user"><div><strong>${escape(g.name)}</strong><small>${escape(g.kind)} · ${g.kind==='App'?`${g.count} processes`:`PID ${g.pids.join(', ')}`}${g.protected?` · ${escape(g.reason||'Protected')}`:''}</small><small>${escape(g.executable)}</small></div><b class="cpu-value ${g.cpu>=100?'cpu-hot':''}">${cpuPercent(g.cpu)}</b><button data-cpu-quit="${escape(g.key)}" aria-label="Quit ${escape(g.name)} (PID ${g.pids.join(', ')})" ${busy||loading||g.protected?'disabled':''}>${g.protected?'Protected':'Quit'}</button></article>`).join(''):'<p class="process-note">No CPU activity measured in your apps or development processes in this sample.</p>';
+  }
   function renderCrewChart(groups) {
     const sorted=[...groups].filter(g=>g.memory>0).sort((a,b)=>b.memory-a.memory);
     const total=sorted.reduce((sum,g)=>sum+g.memory,0);
@@ -47,9 +61,9 @@
     $('#processFreeMemory').disabled=busy||loading||!groups.length;
     $('#processFreeMemory').textContent=busy?'Working…':'Free up memory';
     $('#quickQuitSummary').textContent=groups.length?`${groups.length} marked ${groups.length===1?'app':'apps'} running · ${bytes(groups.reduce((s,g)=>s+g.memory,0))} estimated memory (not guaranteed recoverable)`:saved.size?'No marked apps are currently available to quit.':'Turn on Quick quit next to an app to add it here.';
-    $('#quickQuitApps').innerHTML=[...saved].map(([key,name])=>{
-      const group=data?.groups.find(g=>g.kind==='App'&&g.key===key);
-      return `<span class="quick-quit-chip"><span><strong>${escape(name)}</strong><small>${group?(group.protected?'Protected':`${bytes(group.memory)} · running`):'Not running'}</small></span><button data-remove-quick="${escape(key)}" aria-label="Remove ${escape(name)} from Quick quit" ${busy?'disabled':''}>×</button></span>`;
+    $('#quickQuitApps').innerHTML=groups.map(group=>{
+      const {key,name}=group;
+      return `<span class="quick-quit-chip"><span><strong>${escape(name)}</strong><small>${bytes(group.memory)} · running</small></span><button data-remove-quick="${escape(key)}" aria-label="Remove ${escape(name)} from Quick quit" ${busy?'disabled':''}>×</button></span>`;
     }).join('');
   }
   loadSaved();
@@ -64,11 +78,13 @@
   }
   function render() {
     renderQuick();
+    renderTopCPU();
     if(!data)return;
+    renderCPU();
     renderMemory();
     $('#processSummary').textContent=`${bytes(data.totalMemory)} installed RAM · ${data.groups.length} app / developer groups · Updated ${new Date(data.scannedAt).toLocaleTimeString()}`;
     const rows=visible();
-    $('#processRows').innerHTML=rows.length?rows.map(g=>`<tr><td><input type="checkbox" data-key="${escape(g.key)}" aria-label="Select ${escape(g.name)}" ${selected.has(g.key)?'checked':''} ${g.protected||busy?'disabled':''}></td><td><strong>${escape(g.name)}</strong><small>${escape(g.kind)} · ${escape(g.executable)}</small>${g.protected?`<small>${escape(g.reason)}</small>`:''}</td><td><b>${bytes(g.memory)}</b></td><td>${g.cpu.toFixed(1)}%</td><td><details><summary>${g.count} ${g.count===1?'process':'processes'}</summary><small>PID ${g.pids.join(', ')}</small></details></td><td>${g.kind==='App'?`<label class="quick-toggle"><input type="checkbox" role="switch" data-quick="${escape(g.key)}" aria-label="Quick quit ${escape(g.name)}" ${saved.has(g.key)?'checked':''} ${busy||g.protected?'disabled':''}><span aria-hidden="true"></span></label>`:'<small>Apps only</small>'}</td></tr>`).join(''):'<tr><td colspan="6">No matching apps or processes.</td></tr>';
+    $('#processRows').innerHTML=rows.length?rows.map(g=>`<tr><td><input type="checkbox" data-key="${escape(g.key)}" aria-label="Select ${escape(g.name)}" ${selected.has(g.key)?'checked':''} ${g.protected||busy?'disabled':''}></td><td><strong>${escape(g.name)}</strong><small>${escape(g.kind)} · ${escape(g.executable)}</small>${g.protected?`<small>${escape(g.reason)}</small>`:''}</td><td><b>${bytes(g.memory)}</b></td><td>${cpuPercent(g.cpu)}</td><td><details><summary>${g.count} ${g.count===1?'process':'processes'}</summary><small>PID ${g.pids.join(', ')}</small></details></td><td>${g.kind==='App'?`<label class="quick-toggle"><input type="checkbox" role="switch" data-quick="${escape(g.key)}" aria-label="Quick quit ${escape(g.name)}" ${saved.has(g.key)?'checked':''} ${busy||g.protected?'disabled':''}><span aria-hidden="true"></span></label>`:'<small>Apps only</small>'}</td></tr>`).join(''):'<tr><td colspan="6">No matching apps or processes.</td></tr>';
     bulk();
   }
   async function refresh() {
@@ -78,11 +94,11 @@
       for(const [key,old] of selected){const fresh=data.groups.find(g=>g.key===key&&!g.protected&&g.identity===old.identity);if(fresh)selected.set(key,fresh);else selected.delete(key);}
       render();
       $('#processStatus').textContent='';
-    } catch(e){$('#processStatus').textContent=`${e.message}. Last successful data may be stale.`;$('#memoryOverview').innerHTML='<h3>Memory reading unavailable</h3><p>Refresh to try again. Previous readings may be stale.</p>';}finally{loading=false;renderQuick();}
+    } catch(e){$('#processStatus').textContent=`${e.message}. Last successful data may be stale.`;$('#cpuOverview').innerHTML='<h3>CPU reading unavailable</h3><p>Refresh to try again. Previous app readings may be stale.</p>';$('#memoryOverview').innerHTML='<h3>Memory reading unavailable</h3><p>Refresh to try again. Previous readings may be stale.</p>';}finally{loading=false;renderQuick();renderTopCPU();}
   }
-  async function stop(mode,quick=false) {
+  async function stop(mode,quick=false,target=null) {
     if(busy||(quick&&loading))return;
-    let groups=[...selected.values()];busy=true;render();
+    let groups=target?[target]:[...selected.values()];busy=true;render();
     try{
       if(quick){
         // Resolve remembered app paths to fresh, protected-checked process tokens.
@@ -92,7 +108,7 @@
       }
       if(!groups.length){$('#processStatus').textContent='No marked apps are currently available to quit.';return;}
       const tokens=groups.map(g=>g.token);
-      const response=await fetch('/api/processes/stop',{method:'POST',headers:{'Content-Type':'application/json','X-Port-Authority':'1'},body:JSON.stringify({tokens,mode})});const result=await response.json();if(!response.ok)throw new Error(result.error);if(!quick)selected.clear();busy=false;await refresh();$('#processStatus').textContent=result.results.map(r=>`${r.name}: ${r.status}`).join(' · ');}
+      const response=await fetch('/api/processes/stop',{method:'POST',headers:{'Content-Type':'application/json','X-Port-Authority':'1'},body:JSON.stringify({tokens,mode})});const result=await response.json();if(!response.ok)throw new Error(result.error);if(!quick&&!target)selected.clear();busy=false;await refresh();$('#processStatus').textContent=result.results.map(r=>`${r.name}: ${r.status}`).join(' · ');}
     catch(e){$('#processStatus').textContent=e.message;}finally{busy=false;render();}
   }
   function showRoute() {
@@ -122,6 +138,7 @@
     saveChoices();renderQuick();
   });
   $('#quickQuitApps').addEventListener('click',event=>{const button=event.target.closest('[data-remove-quick]');if(!button||busy)return;saved.delete(button.dataset.removeQuick);saveChoices();render();});
+  $('#cpuUsers').addEventListener('click',event=>{const button=event.target.closest('[data-cpu-quit]');if(!button||busy||loading)return;const group=data?.groups.find(g=>g.key===button.dataset.cpuQuit&&!g.protected);if(group)return stop('quit',false,group);});
   $('#processFreeMemory').addEventListener('click',()=>stop('quit',true));
   window.addEventListener('storage',event=>{if(event.key===storageKey||event.key===null){loadSaved();render();}});
   $('#processSelectAll').addEventListener('change',event=>{visible().filter(g=>!g.protected).forEach(g=>event.target.checked?selected.set(g.key,g):selected.delete(g.key));render();});
@@ -129,5 +146,5 @@
   $('#processRefresh').addEventListener('click',refresh);$('#processQuit').addEventListener('click',()=>stop('quit'));
   $('#processForce').addEventListener('click',()=>{$('#forceNames').textContent=[...selected.values()].map(g=>g.name).join(', ');$('#forceDialog').showModal();});
   $('#forceCancel').addEventListener('click',()=>$('#forceDialog').close());$('#forceConfirm').addEventListener('click',()=>{$('#forceDialog').close();stop('force');});
-  setInterval(()=>{if(active&&!document.hidden&&!$('#forceDialog').open&&!$('#processRows').contains(document.activeElement)&&!$('#processRows').matches(':hover'))refresh();},5000);
+  setInterval(()=>{if(active&&!document.hidden&&!$('#forceDialog').open&&!$('#processRows').contains(document.activeElement)&&!$('#processRows').matches(':hover')&&!$('#cpuUsers').contains(document.activeElement)&&!$('#cpuUsers').matches(':hover'))refresh();},5000);
 })();

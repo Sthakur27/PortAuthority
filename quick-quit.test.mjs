@@ -35,12 +35,18 @@ test('routes support direct entry, navigation and back/forward without duplicate
   assert.equal(h.location.pathname,'/processes');
 });
 
-test('remembers apps across reloads and keeps closed apps removable',async()=>{
+test('remembers apps across reloads, hides closed apps, and shows them again when running',async()=>{
   const first=harness();await first.open();await first.toggle('Spotify');
   const second=harness(first.storage);second.setGroups([]);await second.open();
-  assert.match(second.get('#quickQuitApps').innerHTML,/Spotify/);
-  assert.match(second.get('#quickQuitApps').innerHTML,/Not running/);
+  assert.equal(second.get('#quickQuitApps').innerHTML,'');
+  assert.match(second.get('#quickQuitSummary').textContent,/No marked apps/);
   assert.equal(second.get('#processFreeMemory').disabled,true);
+  assert.match([...first.storage.values()][0],/Spotify/);
+  second.setGroups([app('Spotify'),app('Loom')]);
+  await second.get('#processRefresh').fire('click');
+  assert.match(second.get('#quickQuitApps').innerHTML,/Spotify/);
+  assert.doesNotMatch(second.get('#quickQuitApps').innerHTML,/Loom|Not running/);
+  assert.equal(second.get('#processFreeMemory').disabled,false);
   await second.get('#quickQuitApps').fire('click',{target:{closest:()=>({dataset:{removeQuick:'/Applications/Spotify.app'}})}});
   assert.equal(second.get('#quickQuitApps').innerHTML,'');
   assert.equal([...first.storage.values()][0],'[]');
@@ -56,6 +62,7 @@ test('quick quit ignores filters and bulk selection, uses refreshed tokens, skip
   assert.equal(stops.length,1);
   assert.deepEqual(JSON.parse(stops[0].options.body),{tokens:['fresh-spotify'],mode:'quit'});
   assert.match(h.get('#quickQuitApps').innerHTML,/Spotify/);
+  assert.doesNotMatch(h.get('#quickQuitApps').innerHTML,/Loom|Codex|Protected/);
   assert.match(h.get('#processStatus').textContent,/requested/);
   assert.match(h.get('#quickQuitChart').innerHTML,/crew total/);
   assert.match(h.get('#quickQuitChart').innerHTML,/Spotify/);
@@ -73,4 +80,20 @@ test('storage failures keep session choices and show an honest warning',async()=
   const h=harness(new Map(),true);await h.open();await h.toggle('Spotify');
   assert.match(h.get('#quickQuitApps').innerHTML,/Spotify/);
   assert.match(h.get('#quickQuitStorageStatus').textContent,/only last for this session/);
+});
+
+test('top CPU users rank independently of filters and quit only the clicked process',async()=>{
+  const h=harness();h.setGroups([app('Spotify',{cpu:150}),app('Loom',{cpu:20}),app('Codex',{cpu:200,protected:true}),app('Idle',{cpu:0}),app('New',{cpu:null})]);await h.open();
+  h.get('#processSearch').value='nothing';await h.get('#processSearch').fire('input');
+  const html=h.get('#cpuUsers').innerHTML;
+  assert.ok(html.indexOf('Codex')<html.indexOf('Spotify'));
+  assert.match(html,/150.0%/);assert.match(html,/disabled>Protected/);
+  assert.doesNotMatch(html,/Idle|>New</);
+  await h.get('#processRows').fire('change',{target:{dataset:{key:'/Applications/Loom.app'},checked:true}});
+  await h.get('#cpuUsers').fire('click',{target:{closest:()=>({dataset:{cpuQuit:'/Applications/Spotify.app'}})}});
+  const stops=h.calls.filter(c=>c.url.endsWith('/stop'));
+  assert.deepEqual(JSON.parse(stops[0].options.body),{tokens:['Spotify'],mode:'quit'});
+  assert.match(h.get('#processSelected').textContent,/1 selected/);
+  await h.get('#cpuUsers').fire('click',{target:{closest:()=>({dataset:{cpuQuit:'/Applications/Codex.app'}})}});
+  assert.equal(h.calls.filter(c=>c.url.endsWith('/stop')).length,1);
 });
