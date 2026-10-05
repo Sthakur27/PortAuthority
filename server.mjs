@@ -1,7 +1,8 @@
 import http from 'node:http';
 import { getProcesses, stopProcesses } from './processes.mjs';
 import { execFile, spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, readlink } from 'node:fs/promises';
+import { parseSs } from './ports.mjs';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -10,6 +11,7 @@ const execFileAsync = promisify(execFile);
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(ROOT, 'public');
 const HOST = '127.0.0.1';
+const LSOF = process.platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof';
 const DASHBOARD_PORT = Number(process.env.PORT_AUTHORITY_PORT || 4377);
 const RANGE_START = 3000;
 const RANGE_END = 3999;
@@ -90,15 +92,27 @@ async function processDetails(listener) {
     if (details.ppid === currentPid) break;
     currentPid = details.ppid;
   }
-  const cwdOutput = await run('/usr/sbin/lsof', ['-a', '-p', String(listener.pid), '-d', 'cwd', '-Fn']);
-  const cwd = cwdOutput.split('\n').find((line) => line.startsWith('n'))?.slice(1) || '';
+  let cwd;
+  if (process.platform === 'linux') {
+    cwd = await readlink(`/proc/${listener.pid}/cwd`).catch(() => '');
+  } else {
+    const cwdOutput = await run(LSOF, ['-a', '-p', String(listener.pid), '-d', 'cwd', '-Fn']);
+    cwd = cwdOutput.split('\n').find((line) => line.startsWith('n'))?.slice(1) || '';
+  }
   const git = await gitDetails(cwd);
   return { ...listener, ...sourceFrom(ancestry), user: first?.user || '', elapsed: first?.elapsed || '', fullCommand: first?.command || listener.command, cwd, git };
 }
 
 async function getPorts() {
-  const output = await run('/usr/sbin/lsof', ['-nP', `-iTCP:${RANGE_START}-${RANGE_END}`, '-sTCP:LISTEN', '-Fpcn']);
-  const listeners = parseLsof(output).filter(({ port }) => port >= RANGE_START && port <= RANGE_END);
+  const linux = process.platform === 'linux';
+  const { stdout } = await execFileAsync(linux ? '/usr/bin/ss' : LSOF,
+    linux ? ['-H', '-ltnp', `sport >= :${RANGE_START} and sport <= :${RANGE_END}`]
+      : ['-nP', `-iTCP:${RANGE_START}-${RANGE_END}`, '-sTCP:LISTEN', '-Fpcn'],
+    { maxBuffer: 1024 * 1024, timeout: 4000 }).catch(error => {
+      if (!linux && error.code === 1 && !error.stdout && !error.stderr) return { stdout: '' };
+      throw error;
+    });
+  const listeners = (linux ? parseSs(stdout) : parseLsof(stdout)).filter(({ port }) => port >= RANGE_START && port <= RANGE_END);
   return Promise.all(listeners.map(processDetails)).then((items) => items.sort((a, b) => a.port - b.port));
 }
 
