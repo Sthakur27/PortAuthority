@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#087fdb"><meta name="description" content="Your cheerful harbor master for localhost development servers.">
-  <title>Port Authority — Localhost harbor master</title><link rel="icon" type="image/png" href="/favicon.png?v=2"><link rel="stylesheet" href="/styles.css?v=7">
+  <title>Port Authority — Localhost harbor master</title><link rel="icon" type="image/png" href="/favicon.png?v=2"><link rel="stylesheet" href="/styles.css?v=8">
 </head>
 <body>
   <div class="shell">
@@ -53,7 +53,7 @@
         <article class="last-scan"><span>LAST HARBOR SWEEP</span><strong id="lastScan">—</strong><small>patrols every 3 sec</small></article>
       </section>
       <section class="board">
-        <div class="board-head"><div><p class="section-number">01 — ARRIVALS &amp; DEPARTURES</p><h2>Vessels in harbor</h2></div><label class="search"><span>⌕</span><input id="searchInput" type="search" placeholder="Search berth, vessel, crew…" autocomplete="off"></label></div>
+        <div class="board-head"><div><p class="section-number">01 — ARRIVALS &amp; DEPARTURES</p><h2>Vessels in harbor</h2></div><div class="board-actions"><label class="search"><span>⌕</span><input id="searchInput" type="search" aria-label="Search servers" placeholder="Search berth, vessel, crew…" autocomplete="off"></label><button id="clearAllButton" class="kill-button clear-all-button" type="button" disabled title="Stop all listed servers, including those hidden by search"><span>Clear all</span><b aria-hidden="true">×</b></button></div></div>
         <div class="column-labels" aria-hidden="true"><span>BERTH / CREW</span><span>VESSEL &amp; SIGNAL</span><span>MANIFEST ORIGIN</span><span>HARBOR ACTION</span></div>
         <div id="portList" class="port-list" aria-live="polite" aria-busy="true"><div class="loading-row"><span></span><div><b></b><i></i></div><em></em></div><div class="loading-row"><span></span><div><b></b><i></i></div><em></em></div><div class="loading-row"><span></span><div><b></b><i></i></div><em></em></div></div>
       </section>
@@ -75,7 +75,7 @@
       <footer><span>⚓ PORT AUTHORITY / LOCAL WATERS ONLY</span><p><i></i> Harbor office: 127.0.0.1 · Graceful departure with tugboat fallback</p><span>EST. 2026</span></footer>
     </main>
   </div>
-  <div id="toastRegion" class="toast-region" aria-live="polite"></div><script src="/app.js?v=7" defer></script>
+  <div id="toastRegion" class="toast-region" aria-live="polite"></div><script src="/app.js?v=8" defer></script>
   <link rel="stylesheet" href="/processes.css?v=6"><script src="/processes.js?v=8" defer></script>
 </body>
 </html>

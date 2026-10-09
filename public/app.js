@@ -1,7 +1,8 @@
-const state = { ports: [], query: '', killing: new Set(), ngrok: null, ngrokBusy: new Set() };
+const state = { ports: [], query: '', killing: new Set(), clearingAll: false, ngrok: null, ngrokBusy: new Set() };
 const $ = (selector) => document.querySelector(selector);
 const list = $('#portList');
 const refreshButton = $('#refreshButton');
+const clearAllButton = $('#clearAllButton');
 
 function escapeHtml(value = '') {
   return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
@@ -36,7 +37,7 @@ function vesselFor(source) {
 
 function rowTemplate(item) {
   const key = `${item.pid}:${item.port}`;
-  const isKilling = state.killing.has(key);
+  const isKilling = state.clearingAll || state.killing.has(key);
   const project = projectName(item.cwd, item.command);
   const branchLabel = item.git?.detached ? `Detached at ${item.git.branch}` : item.git?.branch;
   const gitBadge = item.git
@@ -51,6 +52,8 @@ function rowTemplate(item) {
 }
 
 function render() {
+  clearAllButton.disabled = !state.ports.length || state.clearingAll || state.killing.size > 0;
+  clearAllButton.querySelector('span').textContent = state.clearingAll ? 'Clearing…' : 'Clear all';
   const query = state.query.trim().toLowerCase();
   const visible = state.ports.filter((item) => !query || `${item.port} ${item.source} ${item.cwd} ${item.fullCommand} ${item.git?.branch || ''}`.toLowerCase().includes(query));
   $('#usedCount').textContent = String(state.ports.length).padStart(2, '0');
@@ -143,7 +146,7 @@ async function ngrokAction(name, action) {
   }
 }
 
-async function killProcess(pid, port) {
+async function killProcess(pid, port, { bulk = false } = {}) {
   const key = `${pid}:${port}`;
   state.killing.add(key);
   render();
@@ -151,20 +154,44 @@ async function killProcess(pid, port) {
     const response = await fetch('/api/kill', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Port-Authority': '1' }, body: JSON.stringify({ pid, port }) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not stop process');
-    state.ports = state.ports.filter((item) => !(item.pid === pid && item.port === port));
-    toast(`Berth ${port} cleared — PID ${pid} departed`);
-    setTimeout(() => refresh({ quiet: true }), 500);
+    state.ports = state.ports.filter((item) => item.pid !== pid);
+    if (!bulk) {
+      toast(`Berth ${port} cleared — PID ${pid} departed`);
+      setTimeout(() => refresh({ quiet: true }), 500);
+    }
+    return true;
   } catch (error) {
     toast(error.message, 'error');
+    return false;
   } finally {
     state.killing.delete(key);
     render();
   }
 }
 
+clearAllButton.addEventListener('click', async () => {
+  if (clearAllButton.disabled) return;
+  const targets = [...new Map(state.ports.map((item) => [item.pid, item])).values()];
+  const ports = [...new Set(state.ports.map((item) => item.port))].sort((a, b) => a - b);
+  if (!window.confirm(`Stop all ${targets.length} server process${targets.length === 1 ? '' : 'es'} on ports ${ports.join(', ')}? This includes servers hidden by search.`)) return;
+  state.clearingAll = true;
+  render();
+  let cleared = 0;
+  try {
+    for (const { pid, port } of targets) {
+      if (await killProcess(pid, port, { bulk: true })) cleared++;
+    }
+    toast(`${cleared} of ${targets.length} server processes cleared`, cleared === targets.length ? 'success' : 'error');
+    await refresh({ quiet: true });
+  } finally {
+    state.clearingAll = false;
+    render();
+  }
+});
+
 list.addEventListener('click', (event) => {
   const button = event.target.closest('.kill-button');
-  if (button) killProcess(Number(button.dataset.pid), Number(button.dataset.port));
+  if (button && !button.disabled) killProcess(Number(button.dataset.pid), Number(button.dataset.port));
 });
 
 $('#tunnelForm').addEventListener('submit', async (event) => {
@@ -228,5 +255,5 @@ refreshButton.addEventListener('click', () => refresh());
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh({ quiet: true }); });
 refresh();
 refreshNgrok();
-setInterval(() => { if (!document.hidden && !state.killing.size) refresh({ quiet: true }); }, 3000);
+setInterval(() => { if (!document.hidden && !state.killing.size && !state.clearingAll) refresh({ quiet: true }); }, 3000);
 setInterval(() => { if (!document.hidden && !state.ngrokBusy.size) refreshNgrok({ quiet: true }); }, 5000);
